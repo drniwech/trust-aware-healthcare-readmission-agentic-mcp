@@ -114,7 +114,12 @@ INFO:     Uvicorn running on http://0.0.0.0:8000
 
 ## Clinician Dashboard (Streamlit)
 In a separate terminal (after starting the API):  
+  - Make sure streamlit is installed in your local environment:  
+    ```bash
+    pip install streamlit
+    ```
 
+Run Streamlit Dashboard: 
 ```bash
 streamlit run streamlit_dashboard.py
 ```
