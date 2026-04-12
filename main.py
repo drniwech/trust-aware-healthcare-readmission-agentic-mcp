@@ -1,9 +1,6 @@
-import asyncio
 import os
 import threading
-import time
 from datetime import datetime
-from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -16,6 +13,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 from src.planning_agent import execute_task
+from src.config import DEFAULT_MODEL
 
 load_dotenv()
 
@@ -47,7 +45,7 @@ Base.metadata.create_all(bind=engine)
 
 class ReportRequest(BaseModel):
     prompt: str
-    model: str = "openai:gpt-4o-mini"   # default AI model
+    model: str = DEFAULT_MODEL   # default AI model
 
 def run_task_in_thread(task_id: int, prompt: str, model: str):
     db = SessionLocal()

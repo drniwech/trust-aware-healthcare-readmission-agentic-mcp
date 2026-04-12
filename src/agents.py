@@ -5,12 +5,13 @@ from src.mcp_healthcare_tools import (
     predict_readmission_tool,
     explain_prediction_tool,
 )
+from src.config import DEFAULT_MODEL
 
 client = Client()
 
 # === Research Agent (now Healthcare Data + MCP Tool Agent) ===
 def research_agent(
-    prompt: str, model: str = "openai:gpt-4o-mini", return_messages: bool = False
+    prompt: str, model: str = DEFAULT_MODEL, return_messages: bool = False
 ):
     print("==================================")
     print("Healthcare MCP Research Agent")
@@ -121,7 +122,7 @@ USER REQUEST:
 # === Writer Agent (adapted for clinical trust-aware report) ===
 def writer_agent(
     prompt: str,
-    model: str = "openai:gpt-4o-mini",
+    model: str = DEFAULT_MODEL,
     min_words_total: int = 1800,
     min_words_per_section: int = 300,
     max_tokens: int = 12000,
@@ -187,7 +188,7 @@ Output ONLY the complete report in Markdown. No meta-commentary.
 def editor_agent(
     draft: str,
     prompt: str,
-    model: str = "openai:gpt-4o-mini",
+    model: str = DEFAULT_MODEL,
 ):
     print("==================================")
     print("Clinical Editor Agent")

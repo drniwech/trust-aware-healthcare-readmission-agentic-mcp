@@ -2,10 +2,11 @@ from datetime import datetime
 from aisuite import Client
 
 from src.agents import research_agent, writer_agent, editor_agent
+from src.config import DEFAULT_MODEL
 
 client = Client()
 
-def planner_agent(prompt: str, model: str = "openai:gpt-4o-mini"):
+def planner_agent(prompt: str, model: str = DEFAULT_MODEL):
     print("==================================")
     print("Clinical Workflow Planner Agent")
     print("==================================")
@@ -49,7 +50,7 @@ Today is {datetime.now().strftime("%Y-%m-%d")}.
         return "1. Pull FHIR data\n2. Run prediction\n3. Generate SHAP + trust explanation\n4. Write report\n5. Edit for clinical quality"
 
 
-def execute_task(prompt: str, model: str = "openai:gpt-4o-mini") -> str:
+def execute_task(prompt: str, model: str = DEFAULT_MODEL) -> str:
     """Main executor that runs the full multi-agent pipeline (original pattern preserved)."""
     print("Starting trust-aware readmission prediction workflow...")
 
