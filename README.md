@@ -72,7 +72,7 @@ The app **reads only `DATABASE_URL`** at startup.
 * The container’s entrypoint sets a sane default for local dev:
 
   ```
-  postgresql://app:local@127.0.0.1:5432/appdb
+  postgresql://app:local@127.0.0.1:5432/agentic_db
   ```
 * To use Tavily:
 
@@ -82,7 +82,7 @@ Optional (if you want to override defaults done by the entrypoint):
 
 * `POSTGRES_USER` (default `app`)
 * `POSTGRES_PASSWORD` (default `local`)
-* `POSTGRES_DB` (default `appdb`)
+* `POSTGRES_DB` (default `agentic_db`)
 
 ---
 
