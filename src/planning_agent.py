@@ -1,176 +1,69 @@
-import json
-import re
-from typing import List
 from datetime import datetime
 from aisuite import Client
-from src.agents import (
-    research_agent,
-    writer_agent,
-    editor_agent,
-)
+
+from src.agents import research_agent, writer_agent, editor_agent
 
 client = Client()
 
+def planner_agent(prompt: str, model: str = "openai:gpt-4o-mini"):
+    print("==================================")
+    print("Clinical Workflow Planner Agent")
+    print("==================================")
 
-def clean_json_block(raw: str) -> str:
-    raw = raw.strip()
-    if raw.startswith("```"):
-        raw = re.sub(r"^```[a-zA-Z]*\n?", "", raw)
-        raw = re.sub(r"\n?```$", "", raw)
-    return raw.strip("` \n")
+    full_prompt = f"""
+You are an expert clinical AI workflow planner for a **Trust-Aware Healthcare Readmission Prediction Platform**.
 
+User request: {prompt}
 
-from typing import List
-import json, ast
+## AVAILABLE MCP HEALTHCARE TOOLS (use via research_agent):
+1. fhir_data_tool – Retrieve synthetic (or real) FHIR patient EHR data.
+2. predict_readmission_tool – Compute 30-day readmission risk probability.
+3. explain_prediction_tool – Generate SHAP explanations and trust calibration score.
 
+## REQUIRED WORKFLOW PLAN:
+Create a clear, numbered step-by-step plan that strictly follows this sequence for trust-aware prediction:
+1. Pull patient data using fhir_data_tool via the research agent.
+2. Run the prediction model using predict_readmission_tool.
+3. Generate explainability and trust metrics using explain_prediction_tool.
+4. Synthesize everything into a clinical report using the writer agent.
+5. Perform final clinical review and editing.
 
-def planner_agent(topic: str, model: str = "openai:o4-mini") -> List[str]:
-    prompt = f"""
-You are a planning agent responsible for organizing a research workflow using multiple intelligent agents.
+Output ONLY a numbered list of steps with brief descriptions. Focus on trust calibration, explainability, and clinician actionability.
 
-🧠 Available agents:
-- Research agent: MUST begin with a broad **web search using Tavily** to identify only **relevant** and **authoritative** items (e.g., high-impact venues, seminal works, surveys, or recent comprehensive sources). The output of this step MUST capture for each candidate: title, authors, year, venue/source, URL, and (if available) DOI.
-- Research agent: AFTER the Tavily step, perform a **targeted arXiv search** ONLY for the candidates discovered in the web step (match by title/author/DOI). If an arXiv preprint/version exists, record its arXiv URL and version info. Do NOT run a generic arXiv search detached from the Tavily results.
-- Writer agent: drafts based on research findings.
-- Editor agent: reviews, reflects on, and improves drafts.
-
-🎯 Produce a clear step-by-step research plan **as a valid Python list of strings** (no markdown, no explanations). 
-Each step must be atomic, actionable, and assigned to one of the agents.
-Maximum of 7 steps.
-
-🚫 DO NOT include steps like “create CSV”, “set up repo”, “install packages”.
-✅ Focus on meaningful research tasks (search, extract, rank, draft, revise).
-✅ The FIRST step MUST be exactly: 
-"Research agent: Use Tavily to perform a broad web search and collect top relevant items (title, authors, year, venue/source, URL, DOI if available)."
-✅ The SECOND step MUST be exactly:
-"Research agent: For each collected item, search on arXiv to find matching preprints/versions and record arXiv URLs (if they exist)."
-
-🔚 The FINAL step MUST instruct the writer agent to generate a comprehensive Markdown report that:
-- Uses all findings and outputs from previous steps
-- Includes inline citations (e.g., [1], (Wikipedia/arXiv))
-- Includes a References section with clickable links for all citations
-- Preserves earlier sources
-- Is detailed and self-contained
-
-Topic: "{topic}"
+Today is {datetime.now().strftime("%Y-%m-%d")}.
 """
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=1,
-    )
+    messages = [{"role": "user", "content": full_prompt}]
 
-    raw = response.choices[0].message.content.strip()
-
-    # --- robust parsing: JSON -> ast -> fallback ---
-    def _coerce_to_list(s: str) -> List[str]:
-        # try strict JSON
-        try:
-            obj = json.loads(s)
-            if isinstance(obj, list) and all(isinstance(x, str) for x in obj):
-                return obj[:7]
-        except json.JSONDecodeError:
-            pass
-        # try Python literal list
-        try:
-            obj = ast.literal_eval(s)
-            if isinstance(obj, list) and all(isinstance(x, str) for x in obj):
-                return obj[:7]
-        except Exception:
-            pass
-        # try to extract code fence if present
-        if s.startswith("```") and s.endswith("```"):
-            inner = s.strip("`")
-            try:
-                obj = ast.literal_eval(inner)
-                if isinstance(obj, list) and all(isinstance(x, str) for x in obj):
-                    return obj[:7]
-            except Exception:
-                pass
-        return []
-
-    steps = _coerce_to_list(raw)
-
-    # enforce ordering & minimal contract
-    required_first = "Research agent: Use Tavily to perform a broad web search and collect top relevant items (title, authors, year, venue/source, URL, DOI if available)."
-    required_second = "Research agent: For each collected item, search on arXiv to find matching preprints/versions and record arXiv URLs (if they exist)."
-    final_required = "Writer agent: Generate the final comprehensive Markdown report with inline citations and a complete References section with clickable links."
-
-    def _ensure_contract(steps_list: List[str]) -> List[str]:
-        if not steps_list:
-            return [
-                required_first,
-                required_second,
-                "Research agent: Synthesize and rank findings by relevance, recency, and authority; deduplicate by title/DOI.",
-                "Writer agent: Draft a structured outline based on the ranked evidence.",
-                "Editor agent: Review for coherence, coverage, and citation completeness; request fixes.",
-                final_required,
-            ]
-        # inject/replace first two if missing or out of order
-        steps_list = [s for s in steps_list if isinstance(s, str)]
-        if not steps_list or steps_list[0] != required_first:
-            steps_list = [required_first] + steps_list
-        if len(steps_list) < 2 or steps_list[1] != required_second:
-            # remove any generic arxiv step that is not tied to Tavily results
-            steps_list = (
-                [steps_list[0]]
-                + [required_second]
-                + [
-                    s
-                    for s in steps_list[1:]
-                    if "arXiv" not in s or "For each collected item" in s
-                ]
-            )
-        # ensure final step requirement present
-        if final_required not in steps_list:
-            steps_list.append(final_required)
-        # cap to 7
-        return steps_list[:7]
-
-    steps = _ensure_contract(steps)
-
-    return steps
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.1,
+        )
+        plan = resp.choices[0].message.content or ""
+        print("Plan generated:\n", plan)
+        return plan
+    except Exception as e:
+        print("Planner Error:", e)
+        return "1. Pull FHIR data\n2. Run prediction\n3. Generate SHAP + trust explanation\n4. Write report\n5. Edit for clinical quality"
 
 
-def executor_agent_step(step_title: str, history: list, prompt: str):
-    """
-    Executes a step of the executor agent.
-    Returns:
-        - step_title (str)
-        - agent_name (str)
-        - output (str)
-    """
+def execute_task(prompt: str, model: str = "openai:gpt-4o-mini") -> str:
+    """Main executor that runs the full multi-agent pipeline (original pattern preserved)."""
+    print("Starting trust-aware readmission prediction workflow...")
 
-    # Construir contexto enriquecido estructurado
-    context = f"📘 User Prompt:\n{prompt}\n\n📜 History so far:\n"
-    for i, (desc, agent, output) in enumerate(history):
-        if "draft" in desc.lower() or agent == "writer_agent":
-            context += f"\n✍️ Draft (Step {i + 1}):\n{output.strip()}\n"
-        elif "feedback" in desc.lower() or agent == "editor_agent":
-            context += f"\n🧠 Feedback (Step {i + 1}):\n{output.strip()}\n"
-        elif "research" in desc.lower() or agent == "research_agent":
-            context += f"\n🔍 Research (Step {i + 1}):\n{output.strip()}\n"
-        else:
-            context += f"\n🧩 Other (Step {i + 1}) by {agent}:\n{output.strip()}\n"
+    # Step 1: Generate plan
+    plan = planner_agent(prompt, model)
 
-    enriched_task = f"""{context}
+    # Step 2: Research phase (MCP healthcare tools)
+    research_output, _ = research_agent(f"Execute the following plan using MCP tools:\n{plan}\n\nOriginal request: {prompt}", model)
 
-🧩 Your next task:
-{step_title}
-"""
+    # Step 3: Write clinical report
+    draft, _ = writer_agent(research_output, model)
 
-    # Seleccionar agente basado en el paso
-    step_lower = step_title.lower()
-    if "research" in step_lower:
-        content, _ = research_agent(prompt=enriched_task)
-        print("🔍 Research Agent Output:", content)
-        return step_title, "research_agent", content
-    elif "draft" in step_lower or "write" in step_lower:
-        content, _ = writer_agent(prompt=enriched_task)
-        return step_title, "writer_agent", content
-    elif "revise" in step_lower or "edit" in step_lower or "feedback" in step_lower:
-        content, _ = editor_agent(prompt=enriched_task)
-        return step_title, "editor_agent", content
-    else:
-        raise ValueError(f"Unknown step type: {step_title}")
+    # Step 4: Edit for clinical quality and trust emphasis
+    final_report = editor_agent(draft, prompt, model)
+
+    print("Workflow completed successfully.")
+    return final_report

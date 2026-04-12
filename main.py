@@ -1,228 +1,135 @@
+import asyncio
 import os
-import uuid
-import json
 import threading
+import time
 from datetime import datetime
-from typing import Optional, Literal
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from typing import Optional
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Text, DateTime, String
-from sqlalchemy.orm import sessionmaker, declarative_base
-from dotenv import load_dotenv
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
-from src.planning_agent import planner_agent, executor_agent_step
+from src.planning_agent import execute_task
 
-import html, textwrap
-
-# === Load env vars ===
 load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Fix for Heroku's postgres:// URL format
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+app = FastAPI(title="Trust-Aware Healthcare Readmission Prediction Platform")
 
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL not set")
-
-
-# === DB setup ===
-Base = declarative_base()
-engine = create_engine(DATABASE_URL, echo=False, future=True)
-SessionLocal = sessionmaker(bind=engine)
-
-
-class Task(Base):
-    __tablename__ = "tasks"
-    id = Column(String, primary_key=True, index=True)
-    prompt = Column(Text)
-    status = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow)
-    result = Column(Text)
-
-
-try:
-    Base.metadata.drop_all(bind=engine)
-except Exception as e:
-    print(f"\u274c DB creation failed: {e}")
-
-try:
-    Base.metadata.create_all(bind=engine)
-except Exception as e:
-    print(f"\u274c DB creation failed: {e}")
-
-# === FastAPI ===
-app = FastAPI()
-app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
-)
+# Mount static files and templates
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-task_progress = {}
+# Database setup
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://app:local@localhost:5432/agentic_db"   # Use "db" for Docker Compose
+)
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
+class Task(Base):
+    __tablename__ = "tasks"
+    id = Column(Integer, primary_key=True, index=True)
+    prompt = Column(Text)
+    status = Column(String, default="pending")
+    result = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-class PromptRequest(BaseModel):
+Base.metadata.create_all(bind=engine)
+
+class ReportRequest(BaseModel):
     prompt: str
+    model: str = "openai:gpt-4o-mini"   # default AI model
 
+def run_task_in_thread(task_id: int, prompt: str, model: str):
+    db = SessionLocal()
+    try:
+        task = db.query(Task).filter(Task.id == task_id).first()
+        task.status = "running"
+        db.commit()
+
+        result = execute_task(prompt, model)
+
+        task.result = result
+        task.status = "completed"
+        task.updated_at = datetime.utcnow()
+        db.commit()
+    except Exception as e:
+        task.status = "failed"
+        task.result = f"Error: {str(e)}"
+        db.commit()
+    finally:
+        db.close()
 
 @app.get("/", response_class=HTMLResponse)
-def read_index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+async def read_root(request: Request):
+    """Serve the main page using the updated TemplateResponse signature."""
+    # Clear cache to avoid any lingering Jinja2 issues
+    if hasattr(templates.env, "cache") and templates.env.cache is not None:
+        templates.env.cache.clear()
 
-
-@app.get("/api", response_class=JSONResponse)
-def health_check(request: Request):
-    return {"status": "ok"}
-
+    # Modern correct call: pass request first, then template name
+    return templates.TemplateResponse(
+        request=request,  # ← Required first positional argument in new Starlette
+        name="index.html",
+        context={}  # context is optional; request is already passed
+    )
 
 @app.post("/generate_report")
-def generate_report(req: PromptRequest):
-    task_id = str(uuid.uuid4())
+async def generate_report(request: ReportRequest):
     db = SessionLocal()
-    db.add(Task(id=task_id, prompt=req.prompt, status="running"))
-    db.commit()
-    db.close()
+    try:
+        task = Task(prompt=request.prompt, status="pending")
+        db.add(task)
+        db.commit()
+        db.refresh(task)
 
-    task_progress[task_id] = {"steps": []}
-    initial_plan_steps = planner_agent(req.prompt)
-    for step_title in initial_plan_steps:
-        task_progress[task_id]["steps"].append(
-            {
-                "title": step_title,
-                "status": "pending",
-                "description": "Awaiting execution",
-                "substeps": [],
-            }
+        thread = threading.Thread(
+            target=run_task_in_thread,
+            args=(task.id, request.prompt, request.model),
+            daemon=True,
         )
+        thread.start()
 
-    thread = threading.Thread(
-        target=run_agent_workflow, args=(task_id, req.prompt, initial_plan_steps)
-    )
-    thread.start()
-    return {"task_id": task_id}
-
+        return {"task_id": task.id, "status": "pending"}
+    finally:
+        db.close()
 
 @app.get("/task_progress/{task_id}")
-def get_task_progress(task_id: str):
-    return task_progress.get(task_id, {"steps": []})
-
+async def task_progress(task_id: int):
+    db = SessionLocal()
+    try:
+        task = db.query(Task).filter(Task.id == task_id).first()
+        if not task:
+            return {"status": "not_found"}
+        return {
+            "task_id": task.id,
+            "status": task.status,
+            "result": task.result if task.status == "completed" else None,
+            "created_at": task.created_at,
+        }
+    finally:
+        db.close()
 
 @app.get("/task_status/{task_id}")
-def get_task_status(task_id: str):
+async def task_status(task_id: int):
     db = SessionLocal()
-    task = db.query(Task).filter(Task.id == task_id).first()
-    db.close()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return {
-        "status": task.status,
-        "result": json.loads(task.result) if task.result else None,
-    }
-
-
-def format_history(history):
-    return "\n\n".join(
-        f"🔹 {title}\n{desc}\n\n📝 Output:\n{output}" for title, desc, output in history
-    )
-
-
-def run_agent_workflow(task_id: str, prompt: str, initial_plan_steps: list):
-    steps_data = task_progress[task_id]["steps"]
-    execution_history = []
-
-    def update_step_status(index, status, description="", substep=None):
-        if index < len(steps_data):
-            steps_data[index]["status"] = status
-            if description:
-                steps_data[index]["description"] = description
-            if substep:
-                steps_data[index]["substeps"].append(substep)
-            steps_data[index]["updated_at"] = datetime.utcnow().isoformat()
-
     try:
-        for i, plan_step_title in enumerate(initial_plan_steps):
-            update_step_status(i, "running", f"Executing: {plan_step_title}")
-
-            actual_step_description, agent_name, output = executor_agent_step(
-                plan_step_title, execution_history, prompt
-            )
-
-            execution_history.append([plan_step_title, actual_step_description, output])
-
-            def esc(s: str) -> str:
-                return html.escape(s or "")
-
-            def nl2br(s: str) -> str:
-                return esc(s).replace("\n", "<br>")
-
-            # ...
-            update_step_status(
-                i,
-                "done",
-                f"Completed: {plan_step_title}",
-                {
-                    "title": f"Called {agent_name}",
-                    "content": f"""
-<div style='border:1px solid #ccc; border-radius:8px; padding:10px; margin:8px 0; background:#fff;'>
-  <div style='font-weight:bold; color:#2563eb;'>📘 User Prompt</div>
-  <div style='white-space:pre-wrap;'>{prompt}</div>
-
-  <div style='font-weight:bold; color:#16a34a; margin-top:8px;'>📜 Previous Step</div>
-  <pre style='white-space:pre-wrap; background:#f9fafb; padding:6px; border-radius:6px; margin:0;'>
-{format_history(execution_history[-2:-1])}
-  </pre>
-
-  <div style='font-weight:bold; color:#f59e0b; margin-top:8px;'>🧹 Your next task</div>
-  <div style='white-space:pre-wrap;'>{actual_step_description}</div>
-
-  <div style='font-weight:bold; color:#10b981; margin-top:8px;'>✅ Output</div>
-  <!-- ⚠️ NO <pre> AQUÍ -->
-  <div style='white-space:pre-wrap;'>
-{output}
-  </div>
-</div>
-""".strip(),
-                },
-            )
-
-        final_report_markdown = (
-            execution_history[-1][-1] if execution_history else "No report generated."
-        )
-
-        result = {"html_report": final_report_markdown, "history": steps_data}
-
-        db = SessionLocal()
         task = db.query(Task).filter(Task.id == task_id).first()
-        task.status = "done"
-        task.result = json.dumps(result)
-        task.updated_at = datetime.utcnow()
-        db.commit()
+        if not task:
+            return {"status": "not_found"}
+        return {"status": task.status}
+    finally:
         db.close()
 
-    except Exception as e:
-        print(f"Workflow error for task {task_id}: {e}")
-        if steps_data:
-            error_step_index = next(
-                (i for i, s in enumerate(steps_data) if s["status"] == "running"),
-                len(steps_data) - 1,
-            )
-            if error_step_index >= 0:
-                update_step_status(
-                    error_step_index,
-                    "error",
-                    f"Error during execution: {e}",
-                    {"title": "Error", "content": str(e)},
-                )
-
-        db = SessionLocal()
-        task = db.query(Task).filter(Task.id == task_id).first()
-        task.status = "error"
-        task.updated_at = datetime.utcnow()
-        db.commit()
-        db.close()
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

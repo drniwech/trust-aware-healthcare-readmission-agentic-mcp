@@ -1,26 +1,36 @@
-# Reflective Trust-aware Healthcare Research Agent (Agentic AI + MCP).
+# Trust-Aware Healthcare Readmission Prediction Platform (Agentic MCP)
 
-Trust-aware Healthcare Readmission Prediction (Agentic AI + MCP).
-A FastAPI web app that plans a research workflow, runs tool-using agents (Tavily, arXiv, Wikipedia), and stores task state/results in Postgres.
-This repo includes a Docker setup that runs **Postgres + the API in one container** (for local/dev).
+Adapted from the DeepLearning.AI Agentic Workflow course repo.  
+This is a **FastAPI + Postgres** single-container web app that uses **Agentic AI + Model Context Protocol (MCP)** tools to deliver trust-aware 30-day hospital readmission risk predictions.
+
+The system autonomously:
+- Pulls patient EHR data via synthetic FHIR MCP tool
+- Runs readmission prediction
+- Generates SHAP explanations + trust calibration scores
+- Produces clinician-ready reports with uncertainty visualization support
+
+A separate **Streamlit clinician dashboard** provides interactive SHAP waterfalls, risk gauges, and override feedback.
 
 ## Features
 
-* `/` serves a simple UI (Jinja2 template) to kick off a research task.
-* `/generate_report` kicks off a threaded, multi-step agent workflow (planner → research/writer/editor).
-* `/task_progress/{task_id}` live status for each step/substep.
-* `/task_status/{task_id}` final status + report.
+- `/` serves a simple UI to start a prediction task.
+- `/generate_report` launches the threaded multi-agent workflow (planner → MCP research → writer → editor).
+- `/task_progress/{task_id}` and `/task_status/{task_id}` for monitoring.
+- **MCP integration**: Dynamic tool discovery for FHIR data, prediction, and explainability.
+- **Trust-aware design**: SHAP + trust calibration built into every output.
+- **Clinician Dashboard**: Streamlit UI with Plotly visualizations (run separately).
 
----
-
-## Project layout (key paths)
+## Project Layout
 
 ```
 .
 ├─ main.py                      # FastAPI app (your file shown above)
+├─ streamlit_dashboard.py       # Clinician UI with uncertainty viz
 ├─ src/
 │  ├─ planning_agent.py         # planner_agent(), executor_agent_step()
-│  ├─ agents.py                 # research_agent, writer_agent, editor_agent  (example)
+│  ├─ agents.py                 # research_agent (MCP), writer_agent, editor_agent
+│  ├─ mcp_healthcare_tools.py   # FHIR, predict, explain tools (synthetic)
+│  └─ synthetic_data.py         # MIMIC-style EHR generator
 │  └─ research_tools.py         # tavily_search_tool, arxiv_search_tool, wikipedia_search_tool
 ├─ templates/
 │  └─ index.html                # UI page rendered by "/"
@@ -76,18 +86,12 @@ Optional (if you want to override defaults done by the entrypoint):
 
 ---
 
-## Build & Run (local/dev)
 
-### 1) Build
-
-```bash
-docker build -t fastapi-postgres-service .
-```
-
-### 2) Run (foreground)
+## Build & Run (FastAPI + Postgres)
 
 ```bash
-docker run --rm -it  -p 8000:8000  -p 5432:5432  --name fpsvc  --env-file .env  fastapi-postgres-service
+docker build -t trust-aware-readmission-mcp .
+docker run --rm -it -p 8000:8000 -p 5432:5432 --env-file .env trust-aware-readmission-mcp
 ```
 
 You should see logs like:
@@ -97,7 +101,7 @@ You should see logs like:
 ✅ Postgres is ready
 CREATE ROLE
 CREATE DATABASE
-🔗 DATABASE_URL=postgresql://app:local@127.0.0.1:5432/appdb
+🔗 DATABASE_URL=postgresql://app:local@127.0.0.1:5432/agentic_db
 INFO:     Uvicorn running on http://0.0.0.0:8000
 ```
 
@@ -108,101 +112,28 @@ INFO:     Uvicorn running on http://0.0.0.0:8000
 
 ---
 
-## API quickstart
+## Clinician Dashboard (Streamlit)
+In a separate terminal (after starting the API):  
 
-### Kick off a run
+```bash
+streamlit run streamlit_dashboard.py
+```
+Open: http://localhost:8501  
+
+## Quick API Example
 
 ```bash
 curl -X POST http://localhost:8000/generate_report \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "Large Language Models for scientific discovery", "model":"openai:gpt-4o"}'
-# -> {"task_id": "UUID..."}
+  -d '{"prompt": "Generate trust-aware readmission prediction for patient 12345", "model":"openai:gpt-4o-mini"}'
 ```
 
-### Poll progress
+## Development & Customization
 
-```bash
-curl http://localhost:8000/task_progress/<TASK_ID>
-```
+- Swap synthetic FHIR tool → real FHIR MCP server (e.g., Momentum or WSO2) by updating mcp_healthcare_tools.py.
+- Add real ML models or LangGraph for more advanced orchestration. 
+- Feedback from the dashboard improves future trust calibration (human-in-the-loop).  
 
-### Final status + report
-
-```bash
-curl http://localhost:8000/task_status/<TASK_ID>
-```
-
----
-
-## Troubleshooting
-
-**I open [http://localhost:8000](http://localhost:8000) and see nothing / errors**
-
-* Confirm `templates/index.html` exists inside the container:
-
-  ```bash
-  docker exec -it fpsvc bash -lc "ls -l /app/templates && ls -l /app/static || true"
-  ```
-* Watch logs while you load the page:
-
-  ```bash
-  docker logs -f fpsvc
-  ```
-
-**Container asks for a Postgres password on startup**
-
-* The entrypoint uses **UNIX socket + peer auth** for admin tasks (no password).
-  Ensure you’re not calling `psql -h 127.0.0.1 -U postgres` in the script—use:
-
-  ```bash
-  su -s /bin/bash postgres -c "psql -c '...'"
-  ```
-
-**`DATABASE_URL not set` error**
-
-* The entrypoint exports a default DSN. If you overrode it, ensure it’s valid:
-
-  ```
-  postgresql://<user>:<password>@<host>:<port>/<database>
-  ```
-
-**Tables disappear on restart**
-
-* In your `main.py` you call `Base.metadata.drop_all(...)` on startup.
-  Comment it out or guard with an env flag:
-
-  ```python
-  if os.getenv("RESET_DB_ON_STARTUP") == "1":
-      Base.metadata.drop_all(bind=engine)
-  ```
-
-**Tavily / arXiv / Wikipedia errors**
-
-* Provide `TAVILY_API_KEY` and ensure network access, provide in the root dir and `.env` file as follows:
-```
-# OpenAI API Key
-OPENAI_API_KEY=your-open-api-key
-TAVILY_API_KEY=your-tavily-api-key
-```
-
-* Wikipedia rate limits sometimes; try later or handle exceptions gracefully.
-
----
-
-## Development tips
-
-* **Hot reload** (optional): For dev, you can run Uvicorn with `--reload` if you mount your code:
-
-  ```bash
-  docker run --rm -it -p 8000:8000 -p 5432:5432 \
-    -v "$PWD":/app \
-    --name fpsvc fastapi-postgres-service \
-    bash -lc "pg_ctlcluster \$(psql -V | awk '{print \$3}' | cut -d. -f1) main start && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
-  ```
-
-* **Connect to DB from host:**
-
-  ```bash
-  psql "postgresql://app:local@localhost:5432/appdb"
-  ```
-
----
+## Research Use
+This prototype demonstrates Agentic AI + MCP applied to healthcare readmission prediction with built-in trust and explainability. Cite as needed for papers on trust-aware clinical AI systems.
+Built for the Agentic AI + MCP exploration.

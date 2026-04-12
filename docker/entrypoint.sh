@@ -18,7 +18,7 @@ done
 # --- app/DSN variables ---
 : "${POSTGRES_USER:=app}"
 : "${POSTGRES_PASSWORD:=local}"
-: "${POSTGRES_DB:=appdb}"
+: "${POSTGRES_DB:=agentic_db}"
 
 
 # Creates role if it does not exist
