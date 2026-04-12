@@ -1,0 +1,18 @@
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+python-dotenv
+jinja2
+requests
+aisuite[openai]          # Installs aisuite + openai provider
+# OR for all providers (recommended for flexibility):
+# aisuite[all]
+pandas
+numpy
+scikit-learn
+shap
+plotly
+faker
+streamlit
+python-multipart
