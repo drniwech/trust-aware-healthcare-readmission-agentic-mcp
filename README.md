@@ -140,6 +140,8 @@ Use MCP tools to pull data, run prediction, generate SHAP explanation,
 and trust calibration score.
 ```
 
+![Trust-Aware Healthcare Readmission Prediction Platform](https://github.com/drniwech/trust-aware-healthcare-readmission-agentic-mcp/blob/main/static/mainapp.png)  
+
 # 7. Interactive API Document
 A nice interactive API documentation you see at /docs is Swagger UI (specifically, Swagger UI powered by FastAPI).
 FastAPI automatically generates a full OpenAPI specification from your route definitions (@app.get, @app.post, 
@@ -170,6 +172,8 @@ You should see logs like:
   Network URL: http://192.168.86.64:8501
 ```
 Open: http://localhost:8501  
+
+![Trust-Aware Healthcare Readmission Prediction Dashboard](https://github.com/drniwech/trust-aware-healthcare-readmission-agentic-mcp/blob/main/static/Streamlit.png)
 
 ## Quick API Example
 
