@@ -86,8 +86,30 @@ Optional (if you want to override defaults done by the entrypoint):
 
 ---
 
+## Local Virtual Environment Setup
+# 1. Create the new virtual environment with Python 3.11
+```bash
+python3.11 -m venv agentic
+```
+# 2. Activate the environment
+```bash
+source agentic/bin/activate        # On macOS / Linux
+```
+# After activation, your prompt should change and show (agentic)
 
-## Build & Run (FastAPI + Postgres)
+# 3. Upgrade pip (good practice)
+```bash
+pip install --upgrade pip
+```
+
+# 4. Install your project dependencies
+```bash
+# cd trust-aware-healthcare-readmission-agentic-mcp
+# At project root directory (trust-aware-healthcare-readmission-agentic-mcp)  
+pip install -r requirements.txt
+```
+
+# 5. Build & Run (FastAPI + Postgres)
 
 ```bash
 docker build -t trust-aware-readmission-mcp .
@@ -102,13 +124,30 @@ You should see logs like:
 CREATE ROLE
 CREATE DATABASE
 🔗 DATABASE_URL=postgresql://app:local@127.0.0.1:5432/agentic_db
-INFO:     Uvicorn running on http://0.0.0.0:8000
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
 ```
 
-### 3) Open the app
+# 6. Open the app
 
 * UI: [http://localhost:8000/](http://localhost:8000/)
-* Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+* Try this prompt:
+```
+Predict trust-aware 30-day readmission risk for patient 12345. 
+Use MCP tools to pull data, run prediction, generate SHAP explanation, 
+and trust calibration score.
+```
+
+# 7. Interactive API Document
+A nice interactive API documentation you see at /docs is Swagger UI (specifically, Swagger UI powered by FastAPI).
+FastAPI automatically generates a full OpenAPI specification from your route definitions (@app.get, @app.post, 
+Pydantic models, etc.), and then renders it beautifully using Swagger UI.  
+
+* Swagger UI (the nice one), Interactive API tester: [http://localhost:8000/docs](http://localhost:8000/docs)
+* ReDoc, Alternative documentation style: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+* Raw OpenAPI schema, Machine-readable spec: [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json)
 
 ---
 
@@ -122,6 +161,13 @@ In a separate terminal (after starting the API):
 Run Streamlit Dashboard: 
 ```bash
 streamlit run streamlit_dashboard.py
+```
+You should see logs like:
+```
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://192.168.86.64:8501
 ```
 Open: http://localhost:8501  
 
