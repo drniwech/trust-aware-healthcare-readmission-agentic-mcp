@@ -86,6 +86,28 @@ Optional (if you want to override defaults done by the entrypoint):
 
 ---
 
+## Local Virtual Environment Setup
+# 1. Create the new virtual environment with Python 3.11
+```bash
+python3.11 -m venv agentic
+```
+# 2. Activate the environment
+```bash
+source agentic/bin/activate        # On macOS / Linux
+```
+# After activation, your prompt should change and show (agentic)
+
+# 3. Upgrade pip (good practice)
+```bash
+pip install --upgrade pip
+```
+
+# 4. Install your project dependencies
+```bash
+# cd trust-aware-healthcare-readmission-agentic-mcp
+# At project root directory (trust-aware-healthcare-readmission-agentic-mcp)  
+pip install -r requirements.txt
+```
 
 ## Build & Run (FastAPI + Postgres)
 
@@ -102,12 +124,21 @@ You should see logs like:
 CREATE ROLE
 CREATE DATABASE
 🔗 DATABASE_URL=postgresql://app:local@127.0.0.1:5432/agentic_db
-INFO:     Uvicorn running on http://0.0.0.0:8000
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
 ```
 
 ### 3) Open the app
 
 * UI: [http://localhost:8000/](http://localhost:8000/)
+* Try this prompt:
+```
+Predict trust-aware 30-day readmission risk for patient 12345. 
+Use MCP tools to pull data, run prediction, generate SHAP explanation, 
+and trust calibration score.
+```
 * Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 ---
@@ -122,6 +153,13 @@ In a separate terminal (after starting the API):
 Run Streamlit Dashboard: 
 ```bash
 streamlit run streamlit_dashboard.py
+```
+You should see logs like:
+```
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://192.168.86.64:8501
 ```
 Open: http://localhost:8501  
 
