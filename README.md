@@ -109,7 +109,7 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-## Build & Run (FastAPI + Postgres)
+# 5. Build & Run (FastAPI + Postgres)
 
 ```bash
 docker build -t trust-aware-readmission-mcp .
@@ -130,7 +130,7 @@ INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
 ```
 
-### 3) Open the app
+# 6. Open the app
 
 * UI: [http://localhost:8000/](http://localhost:8000/)
 * Try this prompt:
@@ -139,7 +139,15 @@ Predict trust-aware 30-day readmission risk for patient 12345.
 Use MCP tools to pull data, run prediction, generate SHAP explanation, 
 and trust calibration score.
 ```
-* Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+# 7. Interactive API Document
+A nice interactive API documentation you see at /docs is Swagger UI (specifically, Swagger UI powered by FastAPI).
+FastAPI automatically generates a full OpenAPI specification from your route definitions (@app.get, @app.post, 
+Pydantic models, etc.), and then renders it beautifully using Swagger UI.  
+
+* Swagger UI (the nice one), Interactive API tester: [http://localhost:8000/docs](http://localhost:8000/docs)
+* ReDoc, Alternative documentation style: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+* Raw OpenAPI schema, Machine-readable spec: [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json)
 
 ---
 
