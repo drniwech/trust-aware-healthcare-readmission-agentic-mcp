@@ -24,7 +24,7 @@ A separate **Streamlit clinician dashboard** provides interactive SHAP waterfall
 
 ```
 .
-├─ main.py                      # FastAPI app (your file shown above)
+├─ main.py                      # FastAPI main application
 ├─ streamlit_dashboard.py       # Clinician UI with uncertainty viz
 ├─ src/
 │  ├─ planning_agent.py         # planner_agent(), executor_agent_step()
