@@ -49,12 +49,24 @@ A separate **Streamlit clinician dashboard** provides interactive SHAP waterfall
 ## Prerequisites
 
 * **Docker** (Desktop on Windows/macOS, or engine on Linux).
-
+* **Setup Ollama (One-time)** 
 
 * API keys stored in a `.env` file:
 
   ```
+  # === Switch between providers here ===
+  # Local & free (recommended for now)
+  DEFAULT_MODEL=ollama:llama3.2
+  # Uncomment for OpenAI
+  # DEFAULT_MODEL=openai:gpt-4o-mini
+
+  # OpenAI (only needed when using OpenAI)
   OPENAI_API_KEY=your-open-api-key
+
+  # Ollama (usually no need to change)
+  OLLAMA_BASE_URL=http://localhost:11434
+  
+  # Tavily
   TAVILY_API_KEY=your-tavily-api-key
   ```
 
@@ -173,7 +185,7 @@ You should see logs like:
 ```
 Open: http://localhost:8501  
 
-![Trust-Aware Healthcare Readmission Prediction Dashboard](https://github.com/drniwech/trust-aware-healthcare-readmission-agentic-mcp/blob/main/static/Streamlit.png)
+![Trust-Aware Healthcare Readmission Prediction Dashboard](https://github.com/drniwech/trust-aware-healthcare-readmission-agentic-mcp/blob/main/static/streamlit.png)
 
 ## Quick API Example
 

@@ -1,39 +1,13 @@
-from typing import List, Dict
 import requests
-import xml.etree.ElementTree as ET
-from typing import List, Dict, Optional
-import os, re, tempfile
-import requests
-from pdfminer.high_level import extract_text
 
 session = requests.Session()
 session.headers.update(
     {"User-Agent": "LF-ADP-Agent/1.0 (mailto:your.email@example.com)"}
 )
 
-## -----
-
-from typing import List, Dict, Optional
-import os, re, time, tempfile
+from typing import Optional
+import re
 import requests
-import xml.etree.ElementTree as ET
-
-# ----- Session with retries & headers -----
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-
-from typing import List, Dict, Optional
-import os, re, time
-import requests
-import xml.etree.ElementTree as ET
-from io import BytesIO
-
-
-from typing import List, Dict, Optional
-import os, re, time
-import requests
-import xml.etree.ElementTree as ET
-from io import BytesIO
 
 # ----- Session with retries & headers -----
 from requests.adapters import HTTPAdapter
@@ -144,10 +118,6 @@ def maybe_save_pdf(pdf_bytes: bytes, dest_dir: str, filename: str) -> str:
 from typing import List, Dict
 import time, requests, xml.etree.ElementTree as ET
 from io import BytesIO
-
-# session = _build_session()
-# ensure_pdf_url(), clean_text(), fetch_pdf_bytes(), pdf_bytes_to_text(), maybe_save_pdf()
-
 
 def arxiv_search_tool(
     query: str,
