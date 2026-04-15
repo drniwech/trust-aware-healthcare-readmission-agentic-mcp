@@ -49,7 +49,7 @@ A separate **Streamlit clinician dashboard** provides interactive SHAP waterfall
 ## Prerequisites
 
 * **Docker** (Desktop on Windows/macOS, or engine on Linux).
-
+* **Setup Ollama (One-time)** 
 
 * API keys stored in a `.env` file:
 
