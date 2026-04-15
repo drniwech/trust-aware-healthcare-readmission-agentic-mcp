@@ -13,7 +13,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 from src.planning_agent import execute_task
-from src.config import DEFAULT_MODEL
+from src.config import DEFAULT_MODEL   # Import the centralized model config
 
 load_dotenv()
 
@@ -24,10 +24,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 # Database setup
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://app:local@localhost:5432/agentic_db"   # Use "db" for Docker Compose
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://app:local@localhost:5432/agentic_db")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -45,7 +42,8 @@ Base.metadata.create_all(bind=engine)
 
 class ReportRequest(BaseModel):
     prompt: str
-    model: str = DEFAULT_MODEL   # default AI model
+    model: str = DEFAULT_MODEL      # Uses centralized config from .env / config.py
+
 
 def run_task_in_thread(task_id: int, prompt: str, model: str):
     db = SessionLocal()
@@ -54,6 +52,7 @@ def run_task_in_thread(task_id: int, prompt: str, model: str):
         task.status = "running"
         db.commit()
 
+        # Execute the full agentic workflow
         result = execute_task(prompt, model)
 
         task.result = result
@@ -61,11 +60,16 @@ def run_task_in_thread(task_id: int, prompt: str, model: str):
         task.updated_at = datetime.utcnow()
         db.commit()
     except Exception as e:
+        import traceback
+        error_details = f"Error: {str(e)}\n\nTraceback:\n{traceback.format_exc()}"
         task.status = "failed"
-        task.result = f"Error: {str(e)}"
+        task.result = error_details
         db.commit()
+        print("=== THREAD ERROR ===")
+        print(error_details)
     finally:
         db.close()
+
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
@@ -80,6 +84,7 @@ async def read_root(request: Request):
         name="index.html",
         context={}  # context is optional; request is already passed
     )
+
 
 @app.post("/generate_report")
 async def generate_report(request: ReportRequest):
@@ -97,9 +102,10 @@ async def generate_report(request: ReportRequest):
         )
         thread.start()
 
-        return {"task_id": task.id, "status": "pending"}
+        return {"task_id": task.id, "status": "pending", "model_used": request.model}
     finally:
         db.close()
+
 
 @app.get("/task_progress/{task_id}")
 async def task_progress(task_id: int):
@@ -113,9 +119,11 @@ async def task_progress(task_id: int):
             "status": task.status,
             "result": task.result if task.status == "completed" else None,
             "created_at": task.created_at,
+            "model_used": DEFAULT_MODEL,
         }
     finally:
         db.close()
+
 
 @app.get("/task_status/{task_id}")
 async def task_status(task_id: int):
@@ -127,6 +135,7 @@ async def task_status(task_id: int):
         return {"status": task.status}
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     import uvicorn

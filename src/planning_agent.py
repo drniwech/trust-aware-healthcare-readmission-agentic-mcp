@@ -1,10 +1,9 @@
+import os
 from datetime import datetime
-from aisuite import Client
 
 from src.agents import research_agent, writer_agent, editor_agent
 from src.config import DEFAULT_MODEL
 
-client = Client()
 
 def planner_agent(prompt: str, model: str = DEFAULT_MODEL):
     print("==================================")
@@ -12,59 +11,71 @@ def planner_agent(prompt: str, model: str = DEFAULT_MODEL):
     print("==================================")
 
     full_prompt = f"""
-You are an expert clinical AI workflow planner for a **Trust-Aware Healthcare Readmission Prediction Platform**.
+You are an expert clinical AI workflow planner for a Trust-Aware Healthcare Readmission Prediction Platform.
 
 User request: {prompt}
 
-## AVAILABLE MCP HEALTHCARE TOOLS (use via research_agent):
-1. fhir_data_tool – Retrieve synthetic (or real) FHIR patient EHR data.
-2. predict_readmission_tool – Compute 30-day readmission risk probability.
-3. explain_prediction_tool – Generate SHAP explanations and trust calibration score.
+## AVAILABLE MCP HEALTHCARE TOOLS:
+1. fhir_data_tool     → Retrieve synthetic (or real) FHIR patient EHR data.
+2. predict_readmission_tool → Compute 30-day readmission risk probability.
+3. explain_prediction_tool  → Generate SHAP explanations and trust calibration score.
 
-## REQUIRED WORKFLOW PLAN:
-Create a clear, numbered step-by-step plan that strictly follows this sequence for trust-aware prediction:
-1. Pull patient data using fhir_data_tool via the research agent.
-2. Run the prediction model using predict_readmission_tool.
-3. Generate explainability and trust metrics using explain_prediction_tool.
-4. Synthesize everything into a clinical report using the writer agent.
+## REQUIRED WORKFLOW:
+Create a clear, numbered step-by-step plan that strictly follows this sequence:
+1. Use fhir_data_tool to pull patient data via the research agent.
+2. Run predict_readmission_tool to compute the risk.
+3. Use explain_prediction_tool to generate SHAP explanation and trust calibration.
+4. Hand off to the writer agent to synthesize a clinical report.
 5. Perform final clinical review and editing.
 
-Output ONLY a numbered list of steps with brief descriptions. Focus on trust calibration, explainability, and clinician actionability.
+Focus on trust calibration, explainability, and clinician actionability.
 
 Today is {datetime.now().strftime("%Y-%m-%d")}.
+Output ONLY a numbered list of steps.
 """
 
-    messages = [{"role": "user", "content": full_prompt}]
-
-    try:
+    # Use the same LLM logic as agents.py for consistency
+    if DEFAULT_MODEL.startswith("ollama:"):
+        from langchain_ollama import ChatOllama
+        llm = ChatOllama(
+            model=DEFAULT_MODEL.replace("ollama:", ""),
+            base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+            temperature=0.1,
+        )
+        response = llm.invoke(full_prompt)
+        plan = response.content
+    else:
+        import aisuite as ai
+        client = ai.Client()
         resp = client.chat.completions.create(
             model=model,
-            messages=messages,
+            messages=[{"role": "user", "content": full_prompt}],
             temperature=0.1,
         )
         plan = resp.choices[0].message.content or ""
-        print("Plan generated:\n", plan)
-        return plan
-    except Exception as e:
-        print("Planner Error:", e)
-        return "1. Pull FHIR data\n2. Run prediction\n3. Generate SHAP + trust explanation\n4. Write report\n5. Edit for clinical quality"
+
+    print("Plan generated:\n", plan)
+    return plan
 
 
 def execute_task(prompt: str, model: str = DEFAULT_MODEL) -> str:
-    """Main executor that runs the full multi-agent pipeline (original pattern preserved)."""
-    print("Starting trust-aware readmission prediction workflow...")
+    """Main executor that runs the full multi-agent pipeline."""
+    print(f"🚀 Starting trust-aware readmission prediction workflow using {model}...")
 
-    # Step 1: Generate plan
+    # Step 1: Generate clinical workflow plan
     plan = planner_agent(prompt, model)
 
-    # Step 2: Research phase (MCP healthcare tools)
-    research_output, _ = research_agent(f"Execute the following plan using MCP tools:\n{plan}\n\nOriginal request: {prompt}", model)
+    # Step 2: Research phase using MCP healthcare tools
+    research_output, _ = research_agent(
+        f"Execute the following plan using MCP tools:\n{plan}\n\nOriginal request: {prompt}",
+        model
+    )
 
     # Step 3: Write clinical report
     draft, _ = writer_agent(research_output, model)
 
-    # Step 4: Edit for clinical quality and trust emphasis
+    # Step 4: Final clinical editing
     final_report = editor_agent(draft, prompt, model)
 
-    print("Workflow completed successfully.")
+    print("✅ Workflow completed successfully.")
     return final_report

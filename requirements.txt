@@ -5,8 +5,10 @@ psycopg2-binary
 python-dotenv
 jinja2
 requests
-aisuite[openai]          # Installs aisuite + openai provider
-# OR for all providers (recommended for flexibility):
+langchain-ollama          # Best integration for Ollama
+openai                    # Install openai
+aisuite[ollama]           # Optional fallback
+# for all providers (recommended for flexibility):
 # aisuite[all]
 pandas
 numpy

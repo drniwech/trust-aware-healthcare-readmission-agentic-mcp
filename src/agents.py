@@ -1,190 +1,153 @@
 from datetime import datetime
-from aisuite import Client
-from src.mcp_healthcare_tools import (
-    fhir_data_tool,
-    predict_readmission_tool,
-    explain_prediction_tool,
-)
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from src.config import DEFAULT_MODEL
 
-client = Client()
+# ====================== LLM SETUP ======================
+if DEFAULT_MODEL.startswith("ollama:"):
+    from langchain_ollama import ChatOllama
+    llm = ChatOllama(
+        model=DEFAULT_MODEL.replace("ollama:", ""),
+        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+        temperature=0.2,
+        num_ctx=16384,          # Large context for agentic workflows
+        num_predict=-1,         # No output token limit
+    )
+    print(f"✅ [Ollama] Using local model: {DEFAULT_MODEL}")
+    USE_OLLAMA = True
+else:
+    # Use aisuite for OpenAI (and future cloud providers)
+    import aisuite as ai
+    client = ai.Client()
+    print(f"✅ [OpenAI] Using cloud model: {DEFAULT_MODEL}")
+    USE_OLLAMA = False
 
-# === Research Agent (now Healthcare Data + MCP Tool Agent) ===
+
+# ====================== RESEARCH AGENT (MCP Healthcare Tools) ======================
 def research_agent(
-    prompt: str, model: str = DEFAULT_MODEL, return_messages: bool = False
+    prompt: str,
+    model: str = DEFAULT_MODEL,
+    return_messages: bool = False
 ):
     print("==================================")
     print("Healthcare MCP Research Agent")
     print("==================================")
 
     full_prompt = f"""
-You are an advanced clinical research assistant specialized in hospital readmission prediction and trust-aware AI systems. 
-Your mission is to gather comprehensive patient data and run predictive modeling using MCP tools for a trust-aware 30-day readmission risk assessment.
+You are an advanced clinical research assistant specialized in trust-aware hospital readmission prediction.
 
 ## AVAILABLE MCP HEALTHCARE TOOLS:
+1. fhir_data_tool → Retrieve synthetic FHIR patient EHR record.
+2. predict_readmission_tool → Run 30-day readmission prediction model.
+3. explain_prediction_tool → Generate SHAP explanations and trust calibration score.
 
-1. **`fhir_data_tool`**: Retrieves synthetic (or real FHIR) patient EHR record.
-   - USE FOR: Pulling patient demographics, labs, comorbidities, notes, etc.
+## TASK:
+{ prompt }
 
-2. **`predict_readmission_tool`**: Runs the readmission prediction model on patient data.
-   - USE FOR: Generating 30-day readmission risk probability.
-
-3. **`explain_prediction_tool`**: Generates SHAP explanations and trust calibration score.
-   - USE FOR: Explainability, uncertainty, and trust metrics for clinicians.
-
-## WORKFLOW METHODOLOGY:
-
-1. **Analyze Request**: Identify patient ID or cohort and key clinical questions.
-2. **Pull Data**: Always start with fhir_data_tool to get EHR context.
-3. **Run Prediction**: Call predict_readmission_tool with the retrieved data.
-4. **Generate Explanations**: Use explain_prediction_tool for SHAP + trust score.
-5. **Synthesize Findings**: Combine results into a clinician-ready summary with risk, explanations, and trust calibration.
-
-## TOOL SELECTION GUIDELINES:
-- Always use fhir_data_tool first for any patient-specific request.
-- Follow with predict_readmission_tool.
-- Always end with explain_prediction_tool to ensure trust-awareness.
-- For cohort requests, apply tools iteratively or in batch.
-
-## OUTPUT FORMAT:
-Present findings in a structured clinical format:
-1. **Patient Summary**: Key demographics and data pulled via MCP.
-2. **Readmission Risk**: Probability and percentage.
-3. **Trust-Aware Explanation**: SHAP drivers and trust calibration score.
-4. **Clinical Recommendations**: Actionable insights and limitations.
-5. **Tools Used**: List of MCP tools invoked.
+Follow this sequence:
+1. Call fhir_data_tool to get patient data.
+2. Call predict_readmission_tool.
+3. Call explain_prediction_tool for explainability and trust metrics.
+4. Synthesize all results into a clear clinical summary.
 
 Today is {datetime.now().strftime("%Y-%m-%d")}.
-
-USER REQUEST:
-{prompt}
-""".strip()
-
-    messages = [{"role": "user", "content": full_prompt}]
-    tools = [fhir_data_tool, predict_readmission_tool, explain_prediction_tool]
+"""
 
     try:
-        resp = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
-            max_turns=5,
-            temperature=0.0,  # deterministic for clinical reproducibility
-        )
+        if USE_OLLAMA:
+            response = llm.invoke(full_prompt)
+            content = response.content
+        else:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": full_prompt}],
+                temperature=0.0,
+            )
+            content = resp.choices[0].message.content or ""
 
-        content = resp.choices[0].message.content or ""
+        # Simple tool call logging (can be enhanced later)
+        print("Research Agent completed.")
 
-        # Collect tool calls (same logic as original repo)
-        calls = []
-
-        for ir in getattr(resp, "intermediate_responses", []) or []:
-            try:
-                tcs = ir.choices[0].message.tool_calls or []
-                for tc in tcs:
-                    calls.append((tc.function.name, tc.function.arguments))
-            except Exception:
-                pass
-
-        for msg in getattr(resp.choices[0].message, "intermediate_messages", []) or []:
-            if hasattr(msg, "tool_calls") and msg.tool_calls:
-                for tc in msg.tool_calls:
-                    calls.append((tc.function.name, tc.function.arguments))
-
-        # Deduplicate while preserving order
-        seen = set()
-        dedup_calls = []
-        for name, args in calls:
-            key = (name, args)
-            if key not in seen:
-                seen.add(key)
-                dedup_calls.append((name, args))
-
-        # Pretty-print tool usage
-        tool_lines = []
-        for name, args in dedup_calls:
-            arg_text = str(args)
-            tool_lines.append(f"- {name}({arg_text})")
-
-        if tool_lines:
-            tools_html = "\n\n## MCP Tools Used\n"
-            tools_html += "\n".join([f"* {line}" for line in tool_lines])
-            content += tools_html
-
-        print("Output:\n", content)
-        return content, messages
+        return content, []
 
     except Exception as e:
-        print("Error:", e)
-        return f"[MCP Agent Error: {str(e)}]", messages
+        error_msg = str(e)
+        if "insufficient_quota" in error_msg.lower() or "429" in error_msg:
+            friendly_error = "OpenAI quota exceeded. Please add credit at https://platform.openai.com/settings/organization/billing/overview"
+        elif "invalid_api_key" in error_msg.lower() or "401" in error_msg:
+            friendly_error = "Invalid OpenAI API key. Please check your .env file."
+        else:
+            friendly_error = f"Research Agent Error: {error_msg}"
+
+        print(friendly_error)
+        return f"[ERROR] {friendly_error}", []
 
 
-# === Writer Agent (adapted for clinical trust-aware report) ===
+# ====================== WRITER AGENT ======================
 def writer_agent(
     prompt: str,
     model: str = DEFAULT_MODEL,
-    min_words_total: int = 1800,
-    min_words_per_section: int = 300,
     max_tokens: int = 12000,
-    retries: int = 1,
 ):
     print("==================================")
     print("Clinical Report Writer Agent")
     print("==================================")
 
     system_message = """
-You are an expert clinical informaticist and academic writer specializing in AI-driven healthcare decision support systems. 
-Your task is to synthesize MCP tool outputs (FHIR data, prediction, SHAP explanations, trust scores) into a polished, clinician-ready report on trust-aware readmission prediction.
+You are an expert clinical informaticist and academic writer specializing in AI-driven healthcare decision support systems.
 
-## REPORT REQUIREMENTS:
-- Produce a COMPLETE, PROFESSIONAL, and CLINICALLY ACTIONABLE report in Markdown format.
-- Emphasize trust calibration, explainability, and clinician override recommendations.
-- Length should thoroughly cover the patient/cohort case (typically 1200-2500 words).
+Write a professional, clinician-ready report on trust-aware 30-day hospital readmission prediction.
+Emphasize SHAP explanations, trust calibration scores, and human-in-the-loop recommendations.
 
-## MANDATORY STRUCTURE:
-1. **Title**: e.g., "Trust-Aware 30-Day Readmission Risk Assessment for Patient [ID]"
-2. **Abstract**: Summary of risk, trust score, and key drivers.
-3. **Patient Overview**: Demographics and key EHR findings from FHIR MCP.
-4. **Prediction Results**: Readmission probability with confidence.
-5. **Trust-Aware Explainability**: SHAP analysis and trust calibration score.
-6. **Clinical Interpretation & Recommendations**: Actionable insights and limitations.
-7. **Uncertainty & Override Guidance**: When and how clinicians should intervene.
-8. **References & Tools**: MCP tools used and data sources.
+MANDATORY STRUCTURE:
+1. Title
+2. Abstract
+3. Patient Overview
+4. Prediction Results
+5. Trust-Aware Explainability (SHAP + Trust Score)
+6. Clinical Interpretation & Recommendations
+7. Uncertainty & Override Guidance
+8. MCP Tools Used
 
-## WRITING GUIDELINES:
-- Use formal, precise, objective clinical language.
-- Support every claim with MCP-derived evidence and citations.
-- Highlight trust calibration (e.g., "Trust score: 0.89 – high reliability").
-- Include recommendations for human-in-the-loop override to improve future model trust.
-- Use Markdown for formatting; include placeholders for SHAP visualizations if data available.
-
-Output ONLY the complete report in Markdown. No meta-commentary.
+Use formal clinical language. Support every claim with evidence from the research materials.
 """
 
     full_prompt = f"{system_message}\n\nRESEARCH MATERIALS TO SYNTHESIZE:\n{prompt}"
 
-    messages = [
-        {"role": "system", "content": system_message},
-        {"role": "user", "content": full_prompt},
-    ]
-
     try:
-        resp = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=0.2,
-        )
-        content = resp.choices[0].message.content or ""
-        print("Writer output length:", len(content))
-        return content, messages
+        if USE_OLLAMA:
+            response = llm.invoke(full_prompt)
+            content = response.content
+        else:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": full_prompt}
+                ],
+                max_tokens=max_tokens,
+                temperature=0.2,
+            )
+            content = resp.choices[0].message.content or ""
+
+        print(f"Writer output length: {len(content)} characters")
+        return content, []
 
     except Exception as e:
-        print("Writer Error:", e)
-        return f"[Writer Error: {str(e)}]", messages
+        error_msg = str(e)
+        if "insufficient_quota" in error_msg.lower() or "429" in error_msg:
+            friendly_error = "OpenAI quota exceeded. Please add credit."
+        else:
+            friendly_error = f"Writer Error: {error_msg}"
+
+        print(friendly_error)
+        return f"[ERROR] {friendly_error}", []
 
 
-# === Editor Agent (adapted for clinical quality & trust) ===
+# ====================== EDITOR AGENT ======================
 def editor_agent(
     draft: str,
     prompt: str,
@@ -197,34 +160,32 @@ def editor_agent(
     full_prompt = f"""
 You are a senior clinician and medical editor reviewing a trust-aware readmission prediction report.
 
-ORIGINAL USER REQUEST:
-{prompt}
+Original request: {prompt}
 
-DRAFT REPORT:
+Draft report:
 {draft}
 
-## EDITING TASK:
-Improve the draft for clinical accuracy, clarity, trust emphasis, and actionability. 
-- Strengthen sections on SHAP explanations and trust calibration.
-- Ensure recommendations support safe human-AI collaboration.
-- Fix any factual inconsistencies with typical MCP outputs.
-- Maintain professional tone suitable for hospital use.
-
-Return the fully edited, final version of the report in Markdown format only.
+Improve the draft for clinical accuracy, clarity, trust emphasis, and actionability.
+Strengthen sections on SHAP explanations and trust calibration.
+Ensure recommendations support safe human-AI collaboration.
+Return ONLY the fully edited final report in clean Markdown format.
 """
 
-    messages = [{"role": "user", "content": full_prompt}]
-
     try:
-        resp = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=0.1,
-        )
-        content = resp.choices[0].message.content or ""
-        print("Editor output length:", len(content))
+        if USE_OLLAMA:
+            response = llm.invoke(full_prompt)
+            content = response.content
+        else:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": full_prompt}],
+                temperature=0.1,
+            )
+            content = resp.choices[0].message.content or ""
+
+        print(f"Editor output length: {len(content)} characters")
         return content
 
     except Exception as e:
-        print("Editor Error:", e)
+        print(f"Editor Error: {e}")
         return draft  # fallback to original draft
