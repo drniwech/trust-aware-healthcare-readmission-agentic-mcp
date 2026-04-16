@@ -49,7 +49,7 @@ A separate **Streamlit clinician dashboard** provides interactive SHAP waterfall
 ## Prerequisites
 
 * **Docker** (Desktop on Windows/macOS, or engine on Linux).
-* **Setup Ollama (One-time)** 
+* **[Setup Ollama (One-time)](https://github.com/drniwech/trust-aware-healthcare-readmission-agentic-mcp/blob/main/OOLAMA.md)** 
 
 * API keys stored in a `.env` file:
 
