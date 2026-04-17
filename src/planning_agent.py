@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime
 
@@ -59,23 +60,29 @@ Output ONLY a numbered list of steps.
 
 
 def execute_task(prompt: str, model: str = DEFAULT_MODEL) -> str:
-    """Main executor that runs the full multi-agent pipeline."""
+    """Main executor that runs the full multi-agent pipeline and returns structured JSON."""
     print(f"🚀 Starting trust-aware readmission prediction workflow using {model}...")
 
     # Step 1: Generate clinical workflow plan
     plan = planner_agent(prompt, model)
 
-    # Step 2: Research phase using MCP healthcare tools
-    research_output, _ = research_agent(
+    # Step 2: Research phase (returns structured output)
+    research_output = research_agent(
         f"Execute the following plan using MCP tools:\n{plan}\n\nOriginal request: {prompt}",
         model
     )
 
     # Step 3: Write clinical report
-    draft, _ = writer_agent(research_output, model)
+    draft, _ = writer_agent(research_output.get("report_markdown", str(research_output)), model)
 
     # Step 4: Final clinical editing
     final_report = editor_agent(draft, prompt, model)
 
-    print("✅ Workflow completed successfully.")
-    return final_report
+    # Combine everything into structured output
+    final_output = {
+        "report_markdown": final_report,
+        "structured_data": research_output.get("structured_data", {})
+    }
+
+    # Return as JSON string so Streamlit can easily parse it
+    return json.dumps(final_output)
