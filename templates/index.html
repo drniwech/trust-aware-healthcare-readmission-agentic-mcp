@@ -3,16 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trust-Aware Healthcare Readmission Prediction Platform</title>
+    <title>Trust-Aware Healthcare Readmission Platform</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background-color: #f8f9fa; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background-color: #f8f9fa;
+            line-height: 1.6;
+        }
         h1 { color: #0d6efd; }
-        .container { max-width: 800px; margin: 0 auto; }
-        textarea { width: 100%; height: 120px; padding: 12px; }
-        button { padding: 12px 24px; background-color: #0d6efd; color: white; border: none; cursor: pointer; font-size: 16px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        textarea {
+            width: 100%;
+            height: 120px;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+        }
+        button {
+            padding: 12px 24px;
+            background-color: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+        }
         button:hover { background-color: #0b5ed7; }
-        .result { margin-top: 30px; padding: 20px; background: white; border: 1px solid #ddd; border-radius: 8px; }
-        .note { font-size: 0.9em; color: #666; margin-top: 20px; }
+        .result {
+            margin-top: 30px;
+            padding: 25px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .markdown-content {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 6px;
+            border-left: 5px solid #0d6efd;
+        }
+        .note {
+            font-size: 0.95em;
+            color: #555;
+            margin-top: 25px;
+        }
     </style>
 </head>
 <body>
@@ -22,7 +58,7 @@
 
         <form id="reportForm">
             <label for="prompt"><strong>Enter Patient ID or Clinical Case:</strong></label><br><br>
-            <textarea id="prompt" placeholder="Predict trust-aware 30-day readmission risk for patient 12345. Include SHAP explanation and trust calibration score."></textarea><br><br>
+            <textarea id="prompt" placeholder="Predict trust-aware 30-day readmission risk for patient 12345..."></textarea><br><br>
 
             <button type="submit">Generate Trust-Aware Report</button>
         </form>
@@ -30,8 +66,9 @@
         <div id="status" class="result" style="display: none;"></div>
 
         <div class="note">
-            <p><strong>Clinician Dashboard:</strong> For interactive SHAP visualizations, risk gauges, and uncertainty views, open the <a href="http://localhost:8501" target="_blank">Streamlit Dashboard</a> in another tab (run <code>streamlit run streamlit_dashboard.py</code> separately).</p>
-            <p>This platform uses MCP-style tools for FHIR data, prediction, and explainability. Reports include trust calibration for safe clinical use.</p>
+            <p><strong>Clinician Dashboard:</strong> For interactive SHAP visualizations and better experience, open the
+            <a href="http://localhost:8501" target="_blank">Streamlit Dashboard</a> in another tab.</p>
+            <p>This main UI now renders Markdown reports cleanly.</p>
         </div>
     </div>
 
@@ -42,7 +79,10 @@
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const prompt = document.getElementById('prompt').value.trim();
-            if (!prompt) return alert("Please enter a patient ID or case description.");
+            if (!prompt) {
+                alert("Please enter a patient ID or case description.");
+                return;
+            }
 
             statusDiv.style.display = 'block';
             statusDiv.innerHTML = '<p>Starting agentic MCP workflow... Please wait.</p>';
@@ -53,32 +93,47 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ prompt: prompt })
                 });
+
                 const data = await res.json();
+                const task_id = data.task_id;
 
-                statusDiv.innerHTML = `<p>Task started with ID: <strong>${data.task_id}</strong>. Monitoring progress...</p>`;
+                statusDiv.innerHTML = `<p>Task started with ID: <strong>${task_id}</strong>. Waiting for report...</p>`;
 
-                // Simple polling for demo (original repo style)
+                // Polling
                 let attempts = 0;
                 const interval = setInterval(async () => {
                     attempts++;
-                    const progRes = await fetch(`/task_progress/${data.task_id}`);
+                    const progRes = await fetch(`/task_progress/${task_id}`);
                     const prog = await progRes.json();
 
                     if (prog.status === 'completed') {
                         clearInterval(interval);
-                        statusDiv.innerHTML = `<h3>Report Ready</h3><pre style="white-space: pre-wrap;">${prog.result || 'No result'}</pre>`;
-                    } else if (prog.status === 'failed') {
+
+                        // Render Markdown nicely
+                        statusDiv.innerHTML = `
+                            <h3>✅ Report Ready</h3>
+                            <div class="markdown-content">
+                                ${marked.parse(prog.result || 'No result returned')}
+                            </div>
+                        `;
+                    }
+                    else if (prog.status === 'failed') {
                         clearInterval(interval);
-                        statusDiv.innerHTML = `<p style="color:red;">Task failed.</p>`;
-                    } else if (attempts > 60) {
+                        statusDiv.innerHTML = `<p style="color:red;">❌ Task failed. Check backend logs.</p>`;
+                    }
+                    else if (attempts > 60) {
                         clearInterval(interval);
-                        statusDiv.innerHTML += `<p>Still processing... (this may take a minute)</p>`;
+                        statusDiv.innerHTML += `<p style="color:orange;">Still processing... This may take longer with local models.</p>`;
                     }
                 }, 3000);
+
             } catch (err) {
                 statusDiv.innerHTML = `<p style="color:red;">Error: ${err.message}</p>`;
             }
         });
     </script>
+
+    <!-- Include Marked.js for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </body>
 </html>

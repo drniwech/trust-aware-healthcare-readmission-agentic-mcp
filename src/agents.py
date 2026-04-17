@@ -1,4 +1,4 @@
-from datetime import datetime
+import json
 import os
 from dotenv import load_dotenv
 
@@ -27,33 +27,35 @@ else:
 
 
 # ====================== RESEARCH AGENT (MCP Healthcare Tools) ======================
-def research_agent(
-    prompt: str,
-    model: str = DEFAULT_MODEL,
-    return_messages: bool = False
-):
+def research_agent(prompt: str, model: str = DEFAULT_MODEL):
     print("==================================")
     print("Healthcare MCP Research Agent")
     print("==================================")
 
+    # Force the LLM to return structured JSON
     full_prompt = f"""
-You are an advanced clinical research assistant specialized in trust-aware hospital readmission prediction.
+You are a clinical AI assistant. Use the MCP tools and return ONLY valid JSON.
 
-## AVAILABLE MCP HEALTHCARE TOOLS:
-1. fhir_data_tool → Retrieve synthetic FHIR patient EHR record.
-2. predict_readmission_tool → Run 30-day readmission prediction model.
-3. explain_prediction_tool → Generate SHAP explanations and trust calibration score.
+User request: {prompt}
 
-## TASK:
-{ prompt }
+Call the tools in this exact order:
+1. fhir_data_tool(patient_id)
+2. predict_readmission_tool(patient_data)
+3. explain_prediction_tool(patient_data, prediction)
 
-Follow this sequence:
-1. Call fhir_data_tool to get patient data.
-2. Call predict_readmission_tool.
-3. Call explain_prediction_tool for explainability and trust metrics.
-4. Synthesize all results into a clear clinical summary.
+Return EXACTLY this JSON structure (no extra text):
 
-Today is {datetime.now().strftime("%Y-%m-%d")}.
+{{
+  "report_markdown": "Full clinician-friendly Markdown report here...",
+  "structured_data": {{
+    "patient_id": "12345",
+    "readmission_risk": 0.68,
+    "risk_percent": "68.0%",
+    "trust_calibration_score": 0.87,
+    "shap_values": {{"age": 0.25, "comorbidities_count": 0.18, "lab_glucose": 0.12, "lab_creatinine": -0.05}},
+    "top_positive_factors": [["age", 0.25], ["comorbidities_count", 0.18]]
+  }}
+}}
 """
 
     try:
@@ -68,22 +70,16 @@ Today is {datetime.now().strftime("%Y-%m-%d")}.
             )
             content = resp.choices[0].message.content or ""
 
-        # Simple tool call logging (can be enhanced later)
-        print("Research Agent completed.")
-
-        return content, []
+        # Extract JSON safely
+        json_match = json.loads(content)
+        return json_match
 
     except Exception as e:
-        error_msg = str(e)
-        if "insufficient_quota" in error_msg.lower() or "429" in error_msg:
-            friendly_error = "OpenAI quota exceeded. Please add credit at https://platform.openai.com/settings/organization/billing/overview"
-        elif "invalid_api_key" in error_msg.lower() or "401" in error_msg:
-            friendly_error = "Invalid OpenAI API key. Please check your .env file."
-        else:
-            friendly_error = f"Research Agent Error: {error_msg}"
-
-        print(friendly_error)
-        return f"[ERROR] {friendly_error}", []
+        print(f"Research Agent Error: {e}")
+        return {
+            "report_markdown": f"[ERROR] {str(e)}",
+            "structured_data": {}
+        }
 
 
 # ====================== WRITER AGENT ======================

@@ -185,7 +185,11 @@ You should see logs like:
 ```
 Open: http://localhost:8501  
 
-![Trust-Aware Healthcare Readmission Prediction Dashboard](https://github.com/drniwech/trust-aware-healthcare-readmission-agentic-mcp/blob/main/static/streamlit.png)
+![Trust-Aware Healthcare Readmission Prediction Dashboard](https://github.com/drniwech/trust-aware-healthcare-readmission-agentic-mcp/blob/main/static/streamlit.png)  
+
+![Trust-Aware Healthcare Readmission Prediction Chart](https://github.com/drniwech/trust-aware-healthcare-readmission-agentic-mcp/blob/main/static/streamlitchart.png)  
+
+![Trust-Aware Healthcare Readmission Prediction Trust Score](https://github.com/drniwech/trust-aware-healthcare-readmission-agentic-mcp/blob/main/static/streamlittrustscore.png)
 
 ## Quick API Example
 
