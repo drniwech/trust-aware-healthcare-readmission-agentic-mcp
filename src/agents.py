@@ -1,10 +1,13 @@
 import json
+from datetime import datetime #It is used in the prompt templates
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
 from src.config import DEFAULT_MODEL
+# Using in the prompt templates, do not remove the following line.
+from src.mcp_healthcare_tools import fhir_data_tool, predict_readmission_tool, explain_prediction_tool
 
 # ====================== LLM SETUP ======================
 if DEFAULT_MODEL.startswith("ollama:"):
@@ -13,40 +16,37 @@ if DEFAULT_MODEL.startswith("ollama:"):
         model=DEFAULT_MODEL.replace("ollama:", ""),
         base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
         temperature=0.2,
-        num_ctx=16384,          # Large context for agentic workflows
-        num_predict=-1,         # No output token limit
+        num_ctx=16384,
     )
-    print(f"✅ [Ollama] Using local model: {DEFAULT_MODEL}")
     USE_OLLAMA = True
+    print(f"✅ [Ollama] Using local model: {DEFAULT_MODEL}")
 else:
-    # Use aisuite for OpenAI (and future cloud providers)
     import aisuite as ai
     client = ai.Client()
-    print(f"✅ [OpenAI] Using cloud model: {DEFAULT_MODEL}")
     USE_OLLAMA = False
+    print(f"✅ [OpenAI] Using cloud model: {DEFAULT_MODEL}")
 
 
 # ====================== RESEARCH AGENT (MCP Healthcare Tools) ======================
 def research_agent(prompt: str, model: str = DEFAULT_MODEL):
     print("==================================")
-    print("Healthcare MCP Research Agent")
+    print("Healthcare MCP Research Agent (Real HAPI FHIR)")
     print("==================================")
 
-    # Force the LLM to return structured JSON
     full_prompt = f"""
-You are a clinical AI assistant. Use the MCP tools and return ONLY valid JSON.
+You are a precise clinical AI assistant. Respond with **ONLY** valid JSON. No explanations, no markdown, no extra text.
 
 User request: {prompt}
 
-Call the tools in this exact order:
+Use the tools in this exact order:
 1. fhir_data_tool(patient_id)
 2. predict_readmission_tool(patient_data)
 3. explain_prediction_tool(patient_data, prediction)
 
-Return EXACTLY this JSON structure (no extra text):
+Return EXACTLY this JSON structure and nothing else:
 
 {{
-  "report_markdown": "Full clinician-friendly Markdown report here...",
+  "report_markdown": "Full clinician-friendly Markdown report here with sections for Patient Overview, Risk, SHAP, and Recommendations.",
   "structured_data": {{
     "patient_id": "12345",
     "readmission_risk": 0.68,
@@ -61,19 +61,33 @@ Return EXACTLY this JSON structure (no extra text):
     try:
         if USE_OLLAMA:
             response = llm.invoke(full_prompt)
-            content = response.content
+            content = response.content.strip()
         else:
             resp = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": full_prompt}],
                 temperature=0.0,
             )
-            content = resp.choices[0].message.content or ""
+            content = resp.choices[0].message.content.strip()
 
-        # Extract JSON safely
-        json_match = json.loads(content)
-        return json_match
+        # Robust JSON extraction - remove any text before first { and after last }
+        start = content.find('{')
+        end = content.rfind('}') + 1
+        if start != -1 and end > start:
+            json_str = content[start:end]
+            structured_output = json.loads(json_str)
+        else:
+            raise ValueError("No JSON object found in response")
 
+        return structured_output
+
+    except json.JSONDecodeError as je:
+        print(f"JSON Parse Error: {je}")
+        print(f"Raw LLM output was: {content[:500]}...")
+        return {
+            "report_markdown": f"[ERROR] Failed to parse JSON from model response. Raw output: {content[:300]}...",
+            "structured_data": {}
+        }
     except Exception as e:
         print(f"Research Agent Error: {e}")
         return {
@@ -83,32 +97,15 @@ Return EXACTLY this JSON structure (no extra text):
 
 
 # ====================== WRITER AGENT ======================
-def writer_agent(
-    prompt: str,
-    model: str = DEFAULT_MODEL,
-    max_tokens: int = 12000,
-):
+def writer_agent(prompt: str, model: str = DEFAULT_MODEL, max_tokens: int = 12000):
     print("==================================")
     print("Clinical Report Writer Agent")
     print("==================================")
 
     system_message = """
-You are an expert clinical informaticist and academic writer specializing in AI-driven healthcare decision support systems.
-
-Write a professional, clinician-ready report on trust-aware 30-day hospital readmission prediction.
-Emphasize SHAP explanations, trust calibration scores, and human-in-the-loop recommendations.
-
-MANDATORY STRUCTURE:
-1. Title
-2. Abstract
-3. Patient Overview
-4. Prediction Results
-5. Trust-Aware Explainability (SHAP + Trust Score)
-6. Clinical Interpretation & Recommendations
-7. Uncertainty & Override Guidance
-8. MCP Tools Used
-
-Use formal clinical language. Support every claim with evidence from the research materials.
+You are an expert clinical informaticist. Write a professional, clear, and actionable report.
+Emphasize trust calibration, SHAP explanations, and clinical recommendations.
+Use Markdown formatting with clear sections.
 """
 
     full_prompt = f"{system_message}\n\nRESEARCH MATERIALS TO SYNTHESIZE:\n{prompt}"
@@ -133,38 +130,26 @@ Use formal clinical language. Support every claim with evidence from the researc
         return content, []
 
     except Exception as e:
-        error_msg = str(e)
-        if "insufficient_quota" in error_msg.lower() or "429" in error_msg:
-            friendly_error = "OpenAI quota exceeded. Please add credit."
-        else:
-            friendly_error = f"Writer Error: {error_msg}"
-
-        print(friendly_error)
-        return f"[ERROR] {friendly_error}", []
+        print(f"Writer Error: {e}")
+        return f"[Writer Error] {str(e)}", []
 
 
 # ====================== EDITOR AGENT ======================
-def editor_agent(
-    draft: str,
-    prompt: str,
-    model: str = DEFAULT_MODEL,
-):
+def editor_agent(draft: str, prompt: str, model: str = DEFAULT_MODEL):
     print("==================================")
     print("Clinical Editor Agent")
     print("==================================")
 
     full_prompt = f"""
-You are a senior clinician and medical editor reviewing a trust-aware readmission prediction report.
+You are a senior clinician reviewing a trust-aware readmission prediction report.
 
 Original request: {prompt}
 
 Draft report:
 {draft}
 
-Improve the draft for clinical accuracy, clarity, trust emphasis, and actionability.
-Strengthen sections on SHAP explanations and trust calibration.
-Ensure recommendations support safe human-AI collaboration.
-Return ONLY the fully edited final report in clean Markdown format.
+Improve clinical tone, clarity, and actionability. Strengthen sections on SHAP and trust calibration.
+Return ONLY the final polished Markdown report.
 """
 
     try:
@@ -184,4 +169,4 @@ Return ONLY the fully edited final report in clean Markdown format.
 
     except Exception as e:
         print(f"Editor Error: {e}")
-        return draft  # fallback to original draft
+        return draft  # fallback

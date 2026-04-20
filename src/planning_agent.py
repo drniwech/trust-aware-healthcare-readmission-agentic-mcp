@@ -17,7 +17,7 @@ You are an expert clinical AI workflow planner for a Trust-Aware Healthcare Read
 User request: {prompt}
 
 ## AVAILABLE MCP HEALTHCARE TOOLS:
-1. fhir_data_tool     → Retrieve synthetic (or real) FHIR patient EHR data.
+1. fhir_data_tool     → Retrieve real FHIR patient EHR data.
 2. predict_readmission_tool → Compute 30-day readmission risk probability.
 3. explain_prediction_tool  → Generate SHAP explanations and trust calibration score.
 

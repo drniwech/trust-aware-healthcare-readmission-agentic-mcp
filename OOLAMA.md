@@ -36,4 +36,20 @@ That's why you get "Connection refused".
     DEFAULT_MODEL=ollama:llama3.2
     OLLAMA_BASE_URL=http://host.docker.internal:11434
     ```
-  - Rebuild the image and run the container again.
+  - Rebuild the image and run the container again.  
+
+# Run HAPI FHIR Locally (One-time Setup)  
+Run this command on your Mac (in a separate terminal):  
+```bash
+docker run -d \
+  -p 8080:8080 \
+  --name hapi-fhir \
+  -e "HAPI_FHIR_SERVER_NAME=Local Test FHIR Server" \
+  hapiproject/hapi:latest
+```
+
+HAPI FHIR will be available at: http://localhost:8080/fhir  
+It comes with sample data you can use for testing.  
+
+You can check it's running by opening in browser:  
+http://localhost:8080/fhir/Patient  
