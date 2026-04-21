@@ -1,8 +1,9 @@
+import requests
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 import shap
 import json
-from src.synthetic_data import generate_synthetic_ehr
+from src.synthetic_data import generate_synthetic_ehr # Keep as fallback
 
 # ToolResult class for consistency
 class ToolResult:
@@ -11,13 +12,66 @@ class ToolResult:
 
 
 def fhir_data_tool(patient_id: str):
-    """MCP Tool: Retrieve synthetic FHIR-like patient record"""
-    data = generate_synthetic_ehr(patient_id)
-    return {
-        "status": "success",
-        "patient_id": patient_id,
-        "data": data
-    }
+    """MCP Tool: Fetch real patient data from HAPI FHIR server"""
+    fhir_url = os.getenv("FHIR_SERVER_URL", "http://host.docker.internal:8080/fhir")
+
+    try:
+        # Query Patient resource
+        patient_resp = requests.get(f"{fhir_url}/Patient/{patient_id}", timeout=10)
+        patient_resp.raise_for_status()
+        patient = patient_resp.json()
+
+        # Query Observations (labs)
+        obs_resp = requests.get(f"{fhir_url}/Observation?patient={patient_id}", timeout=10)
+        observations = obs_resp.json().get("entry", []) if obs_resp.status_code == 200 else []
+
+        # Simple feature extraction
+        age = 65  # Default fallback
+        if "birthDate" in patient:
+            from datetime import datetime
+            birth_year = int(patient["birthDate"][:4])
+            age = datetime.now().year - birth_year
+
+        comorbidities = len([e for e in observations if "code" in e.get("resource", {})])
+        glucose = 120.0
+        creatinine = 1.2
+
+        for entry in observations:
+            resource = entry.get("resource", {})
+            code = resource.get("code", {}).get("coding", [{}])[0].get("code")
+            value = resource.get("valueQuantity", {}).get("value")
+            if code == "2339-0" and value:  # Glucose code example
+                glucose = float(value)
+            if code == "2160-0" and value:  # Creatinine code example
+                creatinine = float(value)
+
+        data = {
+            "patient_id": patient_id,
+            "age": age,
+            "comorbidities_count": comorbidities,
+            "lab_glucose": glucose,
+            "lab_creatinine": creatinine,
+            "admission_type": "emergency",
+            "length_of_stay": 5,
+            "notes": "Real FHIR data retrieved from HAPI server.",
+            "true_readmission_30d": 0
+        }
+
+        return {
+            "status": "success",
+            "source": "real_hapi_fhir",
+            "data": data
+        }
+
+    except Exception as e:
+        print(f"FHIR fetch failed: {e}. Falling back to synthetic data.")
+        # Fallback to synthetic
+        data = generate_synthetic_ehr(patient_id)
+        return {
+            "status": "fallback",
+            "source": "synthetic",
+            "data": data
+        }
 
 
 def predict_readmission_tool(patient_data: dict):

@@ -16,6 +16,8 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 print(f"🔧 Using model: {DEFAULT_MODEL}")
 
+FHIR_SERVER_URL = os.getenv("FHIR_SERVER_URL", "http://host.docker.internal:8080/fhir")
+
 # You can add more config here later
 # e.g.
 # MAX_TOKENS = 12000
