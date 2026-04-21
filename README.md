@@ -4,7 +4,7 @@ Adapted from the DeepLearning.AI Agentic Workflow course repo.
 This is a **FastAPI + Postgres** single-container web app that uses **Agentic AI + Model Context Protocol (MCP)** tools to deliver trust-aware 30-day hospital readmission risk predictions.
 
 The system autonomously:
-- Pulls patient EHR data via synthetic FHIR MCP tool
+- Pulls patient EHR data via HAPI FHIR MCP tool
 - Runs readmission prediction
 - Generates SHAP explanations + trust calibration scores
 - Produces clinician-ready reports with uncertainty visualization support
@@ -29,7 +29,7 @@ A separate **Streamlit clinician dashboard** provides interactive SHAP waterfall
 ├─ src/
 │  ├─ planning_agent.py         # planner_agent(), executor_agent_step()
 │  ├─ agents.py                 # research_agent (MCP), writer_agent, editor_agent
-│  ├─ mcp_healthcare_tools.py   # FHIR, predict, explain tools (synthetic)
+│  ├─ mcp_healthcare_tools.py   # HAPI FHIR, predict, explain tools 
 │  └─ synthetic_data.py         # MIMIC-style EHR generator
 │  └─ research_tools.py         # tavily_search_tool, arxiv_search_tool, wikipedia_search_tool
 ├─ templates/
@@ -206,7 +206,6 @@ curl -X POST http://localhost:8000/generate_report \
 
 ## Development & Customization
 
-- Swap synthetic FHIR tool → real FHIR MCP server (e.g., Momentum or WSO2) by updating mcp_healthcare_tools.py.
 - Add real ML models or LangGraph for more advanced orchestration. 
 - Feedback from the dashboard improves future trust calibration (human-in-the-loop).  
 
