@@ -201,7 +201,7 @@ Open: http://localhost:8501
 ```bash
 curl -X POST http://localhost:8000/generate_report \
   -H "Content-Type: application/json" \
-  -d '{"prompt": "Generate trust-aware readmission prediction for patient 12345", "model":"openai:gpt-4o-mini"}'
+  -d '{"prompt": "Generate trust-aware readmission prediction for patient 12345", "model":"ollama:llama3.2"}'
 ```
 
 ## Development & Customization
