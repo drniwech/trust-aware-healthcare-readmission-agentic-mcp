@@ -1,4 +1,4 @@
-# Setup Ollama (One-time)
+# 1. Setup Ollama (One-time)
 
 1. Download and install Ollama from https://ollama.com
 2. Pull a good model (recommended for agentic work):
@@ -38,7 +38,7 @@ That's why you get "Connection refused".
     ```
   - Rebuild the image and run the container again.  
 
-# Run HAPI FHIR Locally (One-time Setup)  
+# 2. Run HAPI FHIR Locally (One-time Setup)  
 Run this command on your Mac (in a separate terminal):  
 ```bash
 docker run -d \
@@ -52,4 +52,30 @@ HAPI FHIR will be available at: http://localhost:8080/fhir
 It comes with sample data you can use for testing.  
 
 You can check it's running by opening in browser:  
+http://localhost:8080/fhir/Patient  
+
+## 3. Upload Synthea Patient Data  
+Run following commands on your Mac terminal  
+```bash
+cd data
+python upload_synthea.py
+```
+
+You should see:  
+```bash
+=== Uploading shared resources (Hospital + Practitioners) ===
+Uploaded hospitalInformation1776994450880.json → Status: 200
+Uploaded practitionerInformation1776994450880.json → Status: 200
+
+=== Uploading patient bundles ===
+Uploaded Antoine384_Kuhn96_07a3f612-3519-1c0d-fe5b-c243be2f5465.json → Status: 200
+Uploaded Anton902_Gerlach374_4c18507c-f279-aa73-0f6e-a2f369d196de.json → Status: 200
+Uploaded Charmain607_Lemke654_2580d082-1bb9-dace-9b14-b14cbd5e7c1f.json → Status: 200
+Uploaded David908_Roob72_a124c41e-f101-67b3-7bb6-dacfb699a86d.json → Status: 200
+Uploaded Una192_McKenzie376_64cdcfbf-4403-233d-169d-7aa999c6ab98.json → Status: 200
+
+Upload process completed.
+```
+
+You can see 5 patients uploaded by opening in browser:  
 http://localhost:8080/fhir/Patient  
