@@ -10,11 +10,61 @@ class ToolResult:
     def __init__(self, content: list):
         self.content = content
 
+def patient_ehr_tool(patient_id: str):
+    """MCP tool: Fetch comprehensive patient data for readmission report"""
+    fhir_url = os.getenv("FHIR_SERVER_URL", "http://localhost:8080/fhir")
+    print("fhir_url:", fhir_url)
+    resources = {}
+
+    # Fetch core resources
+    try:
+        patient = requests.get(f"{fhir_url}/Patient/{patient_id}").json()
+        print("patient:", patient)
+        resources["patient"] = {
+            "name": " ".join([n.get("given", [""])[0] + " " + n.get("family", "") for n in patient.get("name", [])]),
+            "dob": patient.get("birthDate", "Unknown"),
+            "gender": patient.get("gender", "Unknown")
+        }
+
+        # Conditions (primary diagnosis)
+        conditions = requests.get(f"{fhir_url}/Condition?patient={patient_id}&_sort=-onsetDate&_count=5").json()
+        print("conditions:", conditions)
+        resources["conditions"] = [c.get("code", {}).get("coding", [{}])[0].get("display", "Unknown")
+                                   for c in conditions.get("entry", [])]
+
+        # Medications
+        meds = requests.get(f"{fhir_url}/MedicationStatement?patient={patient_id}").json()
+        print("meds:", meds)
+        resources["medications"] = [m.get("medicationCodeableConcept", {}).get("coding", [{}])[0].get("display", "")
+                                    for m in meds.get("entry", [])]
+
+        # Allergies
+        allergies = requests.get(f"{fhir_url}/AllergyIntolerance?patient={patient_id}").json()
+        print("allergies:", allergies)
+        resources["allergies"] = [a.get("code", {}).get("coding", [{}])[0].get("display", "")
+                                  for a in allergies.get("entry", [])]
+
+        # Recent encounters / chief complaint (simplified)
+        encounters = requests.get(f"{fhir_url}/Encounter?patient={patient_id}&_sort=-date&_count=3").json()
+        print("encounters:", encounters)
+        resources["recent_encounters"] = len(encounters.get("entry", []))
+
+    except Exception as e:
+        return {"error": str(e), "raw_data": "Failed to fetch from FHIR"}
+
+    return {
+        "patient_info": resources.get("patient", {}),
+        "primary_diagnosis": resources.get("conditions", ["None found"])[0] if resources.get("conditions") else "None",
+        "allergies": resources.get("allergies", ["None"]),
+        "medications": resources.get("medications", ["None"]),
+        "symptoms": "Extracted from recent encounters (implement note parsing if needed)",
+        "raw_resources": resources  # for debugging
+    }
 
 def fhir_data_tool(patient_id: str):
     """MCP Tool: Fetch real patient data from HAPI FHIR server"""
     fhir_url = os.getenv("FHIR_SERVER_URL", "http://host.docker.internal:8080/fhir")
-
+    print("fhir_data_tool...")
     try:
         # Query Patient resource
         patient_resp = requests.get(f"{fhir_url}/Patient/{patient_id}", timeout=10)

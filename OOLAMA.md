@@ -79,3 +79,6 @@ Upload process completed.
 
 You can see 5 patients uploaded by opening in browser:  
 http://localhost:8080/fhir/Patient  
+
+You can see 5 patients from HAPI FHIR Test server by opening in browser:  
+https://hapi.fhir.org/baseR4/Patient?_count=5

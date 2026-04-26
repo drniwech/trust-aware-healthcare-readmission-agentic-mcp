@@ -17,13 +17,13 @@ You are an expert clinical AI workflow planner for a Trust-Aware Healthcare Read
 User request: {prompt}
 
 ## AVAILABLE MCP HEALTHCARE TOOLS:
-1. fhir_data_tool     → Retrieve real FHIR patient EHR data.
+1. patient_ehr_tool     → Retrieve real FHIR patient EHR data.
 2. predict_readmission_tool → Compute 30-day readmission risk probability.
 3. explain_prediction_tool  → Generate SHAP explanations and trust calibration score.
 
 ## REQUIRED WORKFLOW:
 Create a clear, numbered step-by-step plan that strictly follows this sequence:
-1. Use fhir_data_tool to pull patient data via the research agent.
+1. Use patient_ehr_tool to pull patient data via the research agent.
 2. Run predict_readmission_tool to compute the risk.
 3. Use explain_prediction_tool to generate SHAP explanation and trust calibration.
 4. Hand off to the writer agent to synthesize a clinical report.
@@ -71,18 +71,24 @@ def execute_task(prompt: str, model: str = DEFAULT_MODEL) -> str:
         f"Execute the following plan using MCP tools:\n{plan}\n\nOriginal request: {prompt}",
         model
     )
+    # REMOVE
+    print("Research output:\n", research_output)
 
     # Step 3: Write clinical report
     draft, _ = writer_agent(research_output.get("report_markdown", str(research_output)), model)
-
+    #REMOVE
+    print("Draft output:\n", draft)
     # Step 4: Final clinical editing
     final_report = editor_agent(draft, prompt, model)
-
+    #REMOVE
+    print("Final report:\n", final_report)
     # Combine everything into structured output
     final_output = {
         "report_markdown": final_report,
         "structured_data": research_output.get("structured_data", {})
     }
-
+    #REMOVE
+    print("Writer output:\n", final_output)
+    return final_output
     # Return as JSON string so Streamlit can easily parse it
     return json.dumps(final_output)

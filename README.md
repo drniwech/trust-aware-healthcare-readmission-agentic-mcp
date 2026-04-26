@@ -156,7 +156,7 @@ Predict trust-aware 30-day readmission risk for patient 12345.
 Use MCP tools to pull data, run prediction, generate SHAP explanation, 
 and trust calibration score.
 ```
-
+Sample patient IDs: 90270587, 131938827  
 ![Trust-Aware Healthcare Readmission Prediction Platform](https://github.com/drniwech/trust-aware-healthcare-readmission-agentic-mcp/blob/main/static/mainapp.png)  
 
 # 7. Interactive API Document

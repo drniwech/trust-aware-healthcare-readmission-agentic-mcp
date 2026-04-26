@@ -7,7 +7,7 @@ load_dotenv()
 
 from src.config import DEFAULT_MODEL
 # Using in the prompt templates, do not remove the following line.
-from src.mcp_healthcare_tools import fhir_data_tool, predict_readmission_tool, explain_prediction_tool
+from src.mcp_healthcare_tools import fhir_data_tool, predict_readmission_tool, explain_prediction_tool, patient_ehr_tool
 
 # ====================== LLM SETUP ======================
 if DEFAULT_MODEL.startswith("ollama:"):
@@ -39,7 +39,7 @@ You are a precise clinical AI assistant. Respond with **ONLY** valid JSON. No ex
 User request: {prompt}
 
 Use the tools in this exact order:
-1. fhir_data_tool(patient_id)
+1. patient_ehr_tool(patient_id)
 2. predict_readmission_tool(patient_data)
 3. explain_prediction_tool(patient_data, prediction)
 
@@ -106,6 +106,32 @@ def writer_agent(prompt: str, model: str = DEFAULT_MODEL, max_tokens: int = 1200
 You are an expert clinical informaticist. Write a professional, clear, and actionable report.
 Emphasize trust calibration, SHAP explanations, and clinical recommendations.
 Use Markdown formatting with clear sections.
+
+Use ONLY the following structured patient data. Do NOT use placeholders like [Insert ...].
+
+Patient Data:
+{patient_data}
+
+Readmission Risk Prediction: {risk_score}% (Low/Medium/High)
+SHAP Key Factors: {shap_explanation}
+Trust Calibration Score: {trust_score}
+
+Write the report in this exact structure, filling in real values:
+
+**Patient Information**
+Name: [use real name]
+Date of Birth: [use real DOB]
+Primary Diagnosis: [use real diagnosis]
+
+**Current Symptoms**
+Chief Complaint: ...
+Secondary Symptoms: ...
+
+**Medical History**
+Relevant Allergies: ...
+Previous Surgical Procedures: ...
+Medications: ...
+
 """
 
     full_prompt = f"{system_message}\n\nRESEARCH MATERIALS TO SYNTHESIZE:\n{prompt}"
