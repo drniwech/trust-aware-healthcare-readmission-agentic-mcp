@@ -64,7 +64,7 @@ A separate **Streamlit clinician dashboard** provides interactive SHAP waterfall
   OPENAI_API_KEY=your-open-api-key
 
   # Ollama (usually no need to change)
-  OLLAMA_BASE_URL=http://localhost:11434
+  OLLAMA_BASE_URL=http://host.docker.internal:11434
   
   # Tavily
   TAVILY_API_KEY=your-tavily-api-key
